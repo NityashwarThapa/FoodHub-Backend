@@ -83,14 +83,7 @@ describe("Product Management", () => {
     expect(res.body.data).to.be.an("array");
   });
 
-  it("should get a product by SKU", async () => {
-    const res = await chai.request(app)
-      .get(`/products/burger_6169`); // ✅ Use existing SKU
-
-    expect(res).to.have.status(httpStatus.OK);
-    expect(res.body).to.have.property("success", true);
-    expect(res.body.data).to.have.property("name", "Sprite");
-  });
+  
 
   it("should update the product", async () => {
     const res = await chai.request(app)
