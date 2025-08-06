@@ -1,23 +1,96 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userControllers');
-const { verifyUser, verifyAuthorization } = require("../middlewares/authMiddlerware");
+const { verifyUser, verifyAuthorization, preventRoleTampering } = require("../middlewares/authMiddlerware");
+const SecurityMiddleware = require('../middlewares/securityMiddleware');
 
-router.post('/login', userController.login)
+// Public routes with rate limiting
+router.post('/login', 
+  SecurityMiddleware.createAuthRateLimit(),
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  userController.login
+);
 
-router.post('/register', userController.register)
+router.post('/register', 
+  SecurityMiddleware.createAuthRateLimit(),
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  userController.register
+);
 
-router.get('/all', verifyUser, verifyAuthorization, userController.allUser)
+// Email verification routes
+router.post('/verify-email',
+  SecurityMiddleware.createRateLimit(15 * 60 * 1000, 10), // 10 attempts per 15 minutes
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  userController.verifyEmail
+);
 
-router.get('/my-profile', verifyUser, userController.myProfile)
+router.post('/resend-otp',
+  SecurityMiddleware.createRateLimit(15 * 60 * 1000, 3), // 3 attempts per 15 minutes
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  userController.resendOTP
+);
 
-router.put('/update-profile/:id', verifyUser, userController.updateProfile)
+// Password strength check (public for registration form)
+router.post('/check-password-strength',
+  SecurityMiddleware.createRateLimit(),
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  userController.checkPasswordStrength
+);
 
-router.put('/upload-pp', verifyUser, userController.uploadPP)
+// Protected routes requiring authentication
+router.get('/all', 
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  verifyUser, 
+  verifyAuthorization(['admin', 'super-admin']), 
+  userController.allUser
+);
 
-router.put('/change-password', verifyUser, userController.changePassword)
+router.get('/my-profile', 
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  verifyUser, 
+  userController.myProfile
+);
 
-router.delete('/delete-user/:id', verifyUser, verifyAuthorization, userController.deleteUser)
+router.put('/update-profile/:id', 
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  verifyUser, 
+  preventRoleTampering,
+  userController.updateProfile
+);
 
+router.put('/upload-pp', 
+  verifyUser,
+  SecurityMiddleware.validateFileUpload(),
+  userController.uploadPP
+);
 
-module.exports = router
+router.put('/change-password', 
+  SecurityMiddleware.createRateLimit(15 * 60 * 1000, 5), // 5 attempts per 15 minutes
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  verifyUser, 
+  userController.changePassword
+);
+
+router.delete('/delete-user/:id', 
+  SecurityMiddleware.xssProtection(),
+  SecurityMiddleware.mongoSanitization(),
+  verifyUser, 
+  verifyAuthorization(['admin', 'super-admin']), 
+  userController.deleteUser
+);
+
+router.post('/logout',
+  verifyUser,
+  userController.logout
+);
+
+module.exports = router;
